@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Next.js BFF Boilerplate
 
-## Getting Started
+Boilerplate สำหรับแอป Next.js ที่ทำหน้าที่เป็น Backend-for-Frontend (BFF) หน้า browser เรียกเฉพาะ `/api/*`; route ของ Next.js จะเติม service credential แล้วส่งต่อไปยัง upstream API
 
-First, run the development server:
+## เริ่มต้น
 
 ```bash
+npm install
+cp .env.example .env.local
+# ตั้งค่า UPSTREAM_API_URL และ UPSTREAM_SERVICE_TOKEN
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ตัวอย่างหน้าแรกคือ `products` ซึ่งเรียก upstream path `/example/products` ผ่าน generic BFF proxy หากเพิ่ม endpoint ใหม่ ให้เพิ่ม path หนึ่งบรรทัดใน `src/lib/bff-allowlist.ts` ก่อนใช้งาน
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## โครงสร้างสำคัญ
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```text
+src/
+├── app/                         # routing และ shell เท่านั้น
+│   └── api/bff/[...path]/       # generic allowlisted proxy
+├── components/
+│   ├── shared/                  # promote เมื่อมี feature ที่สองใช้จริง
+│   └── ui/                      # primitives ที่ไม่มี domain logic
+├── features/products/           # ตัวอย่าง feature แบบแยกตัวเอง
+│   ├── components/
+│   ├── hooks/                   # TanStack Query อยู่ที่นี่เท่านั้น
+│   ├── api.ts
+│   ├── query-keys.ts
+│   └── schemas.ts
+└── lib/                         # BFF, env, client, errors, query config
+```
 
-## Learn More
+## กติกาหลัก
 
-To learn more about Next.js, take a look at the following resources:
+- อ่านกติกาเต็มใน [`CONVENTIONS.md`](./CONVENTIONS.md) และกติกาย่อใน [`AGENTS.md`](./AGENTS.md)
+- เปลี่ยน UI language ใน `CONVENTIONS.md` ให้ตรงกับโปรเจกต์ใหม่ก่อนเริ่มงาน
+- ห้ามให้ browser เรียก upstream โดยตรง และห้าม expose service token
+- server state ใช้ TanStack Query; ห้าม copy ลง `useState`
+- ทุกหน้าที่อ่านข้อมูลต้องมี loading, error + retry, empty และ content state
+- `process.env` อ่านได้เฉพาะ `src/lib/env.ts`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## ตรวจสอบ
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run typecheck
+npm run lint
+npm run build
+```
 
-## Deploy on Vercel
+## เริ่ม feature ใหม่
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+คัดลอก `src/features/products` เป็นชื่อ feature ใหม่, เปลี่ยน schema/api/query keys/components ตาม domain แล้วเพิ่ม upstream path ใน allowlist ใช้ relative import ภายใน feature และ `@/` เมื่อ import ออกจาก feature
