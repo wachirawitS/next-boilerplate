@@ -39,9 +39,9 @@ match them, stop — this document does not apply to it.
 
 1. **Next.js is a Backend-for-Frontend, and nothing else.** It owns no database, no ORM, no
    migrations, and no business rules. A separate API service owns all of those.
-2. **The browser never calls the upstream API directly.** Every browser request goes to a
-   Next.js route, which attaches a service credential the browser never sees and forwards the
-   request upstream.
+2. **The browser never calls the NestJS API directly.** Every browser request goes to a Next.js
+   route, which resolves the user's OAuth access token from the server-side session and forwards
+   it as a bearer token to NestJS. The token must never reach client JavaScript.
 3. **The application is client-first.** Screens are Client Components. Server state is read
    through TanStack Query against our own `/api/*` routes. React Server Components are used for
    layout and shell, not for fetching feature data.
@@ -51,7 +51,7 @@ match them, stop — this document does not apply to it.
    feature's spec. Everything else is client-first.
 
 **Why client-first rather than RSC-first.** Every request already has to pass through our own
-route layer to pick up the service credential. Fetching from a Server Component would bypass
+   route layer to resolve and forward the access token. Fetching from a Server Component would bypass
 that layer and create a second path to the upstream API. One path is easier to secure, log,
 and reason about than two.
 
@@ -67,7 +67,7 @@ src/
 │   ├── (shop)/
 │   │   └── sale/page.tsx
 │   ├── api/
-│   │   ├── bff/[...path]/route.ts    # Generic upstream proxy
+│   │   ├── bff/[...path]/route.ts    # Generic NestJS proxy (/api/v1)
 │   │   └── checkout/route.ts         # Hand-written, only when §4 allows it
 │   ├── layout.tsx
 │   └── providers.tsx
@@ -198,15 +198,17 @@ generic proxy guarded by an allowlist**.
 ### 4.1 The proxy
 
 ```
-src/app/api/bff/[...path]/route.ts    # forwards to upstream with the service credential
-src/lib/bff-allowlist.ts              # one line per path the browser may reach
+src/app/api/bff/[...path]/route.ts    # forwards to NestJS with the user's access token
+src/lib/bff-allowlist.ts              # one line per NestJS resource the browser may reach
 ```
 
-Adding a new upstream endpoint to the frontend is **one line in the allowlist**. Nothing else.
+Adding a new NestJS resource to the frontend is **one line in the allowlist**, plus the feature's
+typed API/schema code. The BFF supplies `/api/v1` and forwards query strings, request IDs,
+methods, and the user's bearer token.
 
 ### 4.2 Why an allowlist and not a bare catch-all
 
-A bare catch-all proxy attaches the service credential to *anything* the browser asks for. That
+A bare catch-all proxy forwards the access token to *anything* the browser asks for. That
 makes every upstream endpoint — including the ones intended to be internal — reachable from the
 browser's devtools by anyone with a session. The credential stops being a boundary.
 
@@ -442,7 +444,7 @@ mentions `Sale`, it is in the wrong folder.
 |------|----------------|
 | `lib/utils.ts` | `cn()` only. Nothing else may be added here. |
 | `lib/api-client.ts` | Browser-side fetch wrapper for `/api/*`. Adds headers, parses JSON, throws a typed `ApiError`. |
-| `lib/upstream.ts` | Server-side client for the upstream API, carrying the service credential. First line is `import "server-only"`. |
+| `lib/upstream.ts` | Server-side client for the NestJS API, carrying the user's access token. First line is `import "server-only"`. |
 | `lib/bff-allowlist.ts` | Paths the browser may reach through the proxy (§4). |
 | `lib/errors.ts` | `ApiError`, upstream-error translation, and the field-error → `setError` helper (§7.3). |
 | `lib/query-client.ts` | TanStack Query defaults, in one place. |
@@ -469,17 +471,16 @@ Only `lib/env.ts` may touch `process.env`. Everywhere else imports the validated
 // src/lib/env.ts
 const serverSchema = z.object({
   UPSTREAM_API_URL: z.string().url(),
-  UPSTREAM_SERVICE_TOKEN: z.string().min(1),
 });
 ```
 
 A missing or malformed variable then fails at build time, in front of a developer, instead of at
 runtime in front of a user.
 
-### 10.4 The service credential must be impossible to leak
+### 10.4 The OAuth access token must be impossible to leak
 
 `lib/upstream.ts` starts with `import "server-only"`. If anything reachable from a Client
-Component ever imports it, the build fails. The credential reaching the client bundle is not a
+Component ever imports it, the build fails. The access token reaching the client bundle is not a
 thing to be careful about; it is a thing that must not be able to happen.
 
 ---
@@ -516,7 +517,7 @@ content**. Skipping one is an incomplete component, not a shortcut.
 Each project **declares one UI language at kickoff** and records it here:
 
 ```
-UI language for this project: <language>
+UI language for this project: Thai
 ```
 
 Every user-facing string is written directly in that language, in the JSX. No i18n library, no
@@ -526,6 +527,14 @@ translation-key indirection.
 - Do not mix languages in the interface. One language, everywhere the user can see.
 - Do not display a raw error message from the API. Map it through `lib/errors.ts` first
   (§7.3) — upstream wording changes without warning, and can expose internal detail.
+
+NestJS integration defaults:
+
+- Nest routes are `/api/v1/<plural-kebab-case-resource>`; the Next BFF route is `/api/bff/<resource>`.
+- OAuth scopes such as `tasks:read` are enforced by NestJS. The Next client does not duplicate permission or business-state rules.
+- Nest list responses are `{ data, meta }`; single resources are direct DTOs.
+- Nest errors use `code`, safe English `message`, optional `fieldErrors`, and `requestId`. The frontend maps codes/messages to Thai and places field errors on form fields.
+- `X-Request-Id` is generated or propagated by the BFF and forwarded to NestJS.
 
 Add an i18n library **only if the project states a requirement for two or more languages at
 kickoff.** Retrofitting it later is a mechanical refactor; carrying `t("sale.checkout.button")`

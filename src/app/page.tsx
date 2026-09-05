@@ -1,5 +1,5 @@
-import { ProductsScreen } from "@/features/products/components/products-screen";
+import { TasksScreen } from "@/features/tasks/components/tasks-screen";
 
 export default function HomePage() {
-  return <ProductsScreen />;
+  return <TasksScreen />;
 }

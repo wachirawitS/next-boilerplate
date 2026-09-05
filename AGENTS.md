@@ -12,7 +12,9 @@ non-trivial change, and whenever this file is silent. **If the two disagree,
 
 Next.js is a **Backend-for-Frontend only**. It owns no database, no ORM, and no business rules —
 a separate API owns all of them. The browser never calls that API directly; every request goes
-through our own `/api/*` routes, which attach a service credential the browser never sees.
+through our own `/api/*` routes, which resolve and forward the user's OAuth bearer token without
+exposing it to client JavaScript. The companion NestJS API uses `/api/v1`, UUIDs, ISO timestamps,
+`{ data, meta }` list responses, permissions such as `tasks:read`, and structured errors.
 
 Screens are **client-first**: Client Components reading server state through TanStack Query.
 
@@ -55,7 +57,9 @@ Screens are **client-first**: Client Components reading server state through Tan
    like the content — not a spinner, not `Loading...`), error (inline, with a retry calling
    `refetch()`), empty (the shared `<EmptyState>`), content.
 
-10. **`process.env` is read only in `src/lib/env.ts`.** Import `{ env }` everywhere else.
+10. **The BFF forwards the user's OAuth access token to NestJS.** Resolve it from the server-side
+session; never expose it to client JavaScript. `process.env` is read only in `src/lib/env.ts`.
+Import `{ env }` everywhere else.
     `lib/upstream.ts` must keep its `import "server-only"` first line.
 
 ---
